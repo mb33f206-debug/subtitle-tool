@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -63,9 +66,33 @@ jobs:
           cp src-tauri/models/ggml-small.bin dist/subtitle-tool/models/
           cd dist && 7z a -tzip ../subtitle-tool-windows.zip subtitle-tool/
 
-      - name: Upload portable zip
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: subtitle-tool-windows
           path: subtitle-tool-windows.zip
           retention-days: 30
+
+      - name: Create or update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "字幕提取工具 - 最新版"
+          body: |
+            ## 使用方式
+            1. 下載 `subtitle-tool-windows.zip`
+            2. 解壓縮到任意資料夾
+            3. 雙擊 `subtitle-tool.exe` 啟動
+            4. 在設定中填入 Gemini API Key
+            5. 拖入影片即可產生字幕
+
+            ## 包含內容
+            - `subtitle-tool.exe` - 主程式
+            - `bin/ffmpeg.exe` - 音訊處理
+            - `bin/whisper-cpp.exe` - 語音辨識
+            - `models/ggml-small.bin` - 辨識模型
+
+            > 支援中文資料夾路徑，不需要安裝任何額外軟體。
+          files: subtitle-tool-windows.zip
+          make_latest: true
+          prerelease: false
