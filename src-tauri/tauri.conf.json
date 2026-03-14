@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicovank/tauri-docs-v2/main/schema/config.schema.json",
-  "productName": "短影音字幕提取工具",
+  "productName": "subtitle-tool",
   "version": "1.0.0",
   "identifier": "com.subtitle-tool.app",
   "build": {
