@@ -48,7 +48,7 @@ pub fn parse_srt(srt: &str) -> Vec<SubtitleEntry> {
 
 /// Convert parsed entries to ASS format
 pub fn entries_to_ass(entries: &[SubtitleEntry]) -> String {
-    let mut ass = String::new();
+    let mut ass = String::with_capacity(1024 + entries.len() * 80);
     ass.push_str("[Script Info]\r\n");
     ass.push_str("ScriptType: v4.00+\r\n");
     ass.push_str("PlayResX: 1920\r\n");
@@ -84,11 +84,21 @@ pub fn entries_to_txt(entries: &[SubtitleEntry]) -> String {
 
 fn srt_time_to_ass(time: &str) -> String {
     // SRT: 00:01:23,456 -> ASS: 0:01:23.46
-    let t = time.replace(',', ".");
-    if t.len() >= 11 {
-        let h = &t[1..2]; // skip leading 0
-        let rest = &t[2..11]; // :MM:SS.mm (take only 2 decimal places)
-        format!("{}{}{}", h, &rest[..7], &rest[7..9])
+    let t = time.trim().replace(',', ".");
+    let parts: Vec<&str> = t.split(':').collect();
+    if parts.len() == 3 {
+        let h: u32 = parts[0].parse().unwrap_or(0);
+        let m = parts[1];
+        // Split seconds from centiseconds
+        let sec_parts: Vec<&str> = parts[2].split('.').collect();
+        let s = sec_parts[0];
+        let cs = if sec_parts.len() > 1 {
+            let frac = sec_parts[1];
+            if frac.len() >= 2 { &frac[..2] } else { frac }
+        } else {
+            "00"
+        };
+        format!("{}:{:0>2}:{:0>2}.{}", h, m, s, cs)
     } else {
         t
     }

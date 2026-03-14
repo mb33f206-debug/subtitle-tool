@@ -12,7 +12,8 @@ const LOG_LEVELS = {
   warn: 'warn'
 };
 
-// Store logs in memory for export
+// Store logs in memory for export (capped to prevent memory leaks)
+const MAX_LOG_ENTRIES = 5000;
 let logEntries = [];
 
 export function addLog(message, level = 'info') {
@@ -28,8 +29,10 @@ export function addLog(message, level = 'info') {
   logContent.appendChild(line);
   logContent.scrollTop = logContent.scrollHeight;
 
-  // Store for export
   logEntries.push({ time, level, message });
+  if (logEntries.length > MAX_LOG_ENTRIES) {
+    logEntries = logEntries.slice(-MAX_LOG_ENTRIES);
+  }
 }
 
 export function clearLogs() {

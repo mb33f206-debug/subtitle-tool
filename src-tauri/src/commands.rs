@@ -87,8 +87,10 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
         emit_log(&app, "info", "正在使用 Gemini AI 校正字幕...");
         emit_progress(&app, "gemini", 65, "Gemini AI 校正中...");
 
-        let gemini = &settings.as_ref().unwrap().gemini;
-        let c = client.as_ref().unwrap();
+        let (gemini, c) = match (settings.as_ref(), client.as_ref()) {
+            (Some(s), Some(c)) => (&s.gemini, c),
+            _ => return Err("Gemini 設定未載入".to_string()),
+        };
         let fix_prompt = "你是一個專業的字幕校對員。我會給你一段影片和語音辨識軟體自動產生的 SRT 字幕。請你觀看影片，對照字幕，修正錯字、標點、斷句。保持 SRT 格式不變（序號、時間軸完全不動），只修正文字內容，直接輸出修正後的完整 SRT。";
 
         match call_gemini(c, gemini, fix_prompt, &srt_final).await {
@@ -116,8 +118,10 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
         );
         emit_progress(&app, "translate", 82, "翻譯中...");
 
-        let gemini = &settings.as_ref().unwrap().gemini;
-        let c = client.as_ref().unwrap();
+        let (gemini, c) = match (settings.as_ref(), client.as_ref()) {
+            (Some(s), Some(c)) => (&s.gemini, c),
+            _ => return Err("Gemini 設定未載入".to_string()),
+        };
         let target_lang = match req.translate_to.as_str() {
             "en" => "英文",
             "ja" => "日文",

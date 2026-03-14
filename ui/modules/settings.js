@@ -84,19 +84,22 @@ export function displayDir(el, dir, fallback) {
 }
 
 // --- Tab switching ---
-document.querySelectorAll('.tab').forEach(tab => {
+const allTabs = document.querySelectorAll('.tab');
+const allTabContents = document.querySelectorAll('.tab-content');
+allTabs.forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    allTabs.forEach(t => t.classList.remove('active'));
+    allTabContents.forEach(c => c.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
   });
 });
 
 // --- Theme buttons ---
-document.querySelectorAll('.theme-btn').forEach(btn => {
+const allThemeBtns = document.querySelectorAll('.theme-btn');
+allThemeBtns.forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+    allThemeBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentTheme = btn.dataset.theme;
     applyTheme(currentTheme);
@@ -206,7 +209,7 @@ btnSettings.addEventListener('click', async () => {
     }
     applyAllSettings(settings);
     fontSizeValue.textContent = currentFontSize;
-    document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === currentTheme));
+    allThemeBtns.forEach(b => b.classList.toggle('active', b.dataset.theme === currentTheme));
 
     displayDir(settingsOutputDir, currentOutputDir, '未設定（與影片同目錄）');
     logAutoExportCheckbox.checked = currentLogAutoExport;
