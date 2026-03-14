@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(which curl:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.gyan.dev)",
+      "Bash(curl:*)",
+      "Bash(cd:*)"
+    ]
+  }
+}

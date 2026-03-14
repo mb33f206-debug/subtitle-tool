@@ -1,0 +1,22 @@
+# Build artifacts
+src-tauri/target/
+src-tauri/gen/
+
+# Dependencies
+node_modules/
+
+# External binaries (download separately)
+src-tauri/bin/*.exe
+src-tauri/bin/*.dll
+src-tauri/bin/ffmpeg
+src-tauri/bin/whisper-cpp
+
+# Model files (too large for git)
+src-tauri/models/*.bin
+
+# Secrets
+.env
+
+# OS files
+.DS_Store
+Thumbs.db

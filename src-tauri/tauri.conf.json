@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicovank/tauri-docs-v2/main/schema/config.schema.json",
+  "productName": "短影音字幕提取工具",
+  "version": "1.0.0",
+  "identifier": "com.subtitle-tool.app",
+  "build": {
+    "frontendDist": "../ui",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "短影音字幕提取工具",
+        "width": 900,
+        "height": 720,
+        "resizable": true,
+        "center": true,
+        "minWidth": 800,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  },
+  "plugins": {}
+}
