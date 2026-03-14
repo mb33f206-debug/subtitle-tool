@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::audio::extract_audio;
+use crate::bin_path::cleanup_ascii_temps;
 use crate::gemini::call_gemini;
 use crate::progress::{emit_log, emit_progress};
 use crate::settings::{load_settings, save_settings_to_file, settings_path};
@@ -60,14 +61,15 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
     // Step 2: Run whisper
     let srt_raw = run_whisper(&app, &audio_path, &req.language)?;
 
-    // Clean up temp audio
+    // Clean up temp audio and any ASCII-safe temp copies (model, audio hard links)
     let _ = fs::remove_file(&audio_path);
+    cleanup_ascii_temps();
 
     let needs_gemini = req.use_gemini || !req.translate_to.is_empty();
     let mut srt_final = srt_raw;
 
-    // Load settings and create HTTP client once for Gemini steps
-    let (gemini_settings, gemini_client) = if needs_gemini {
+    // Load settings and create HTTP client once for Gemini steps (only if needed)
+    let gemini_ctx = if needs_gemini {
         let path = settings_path(&app)?;
         let s = load_settings(&path)?;
         if s.gemini.api_key.is_empty() || s.gemini.base_url.is_empty() {
@@ -77,20 +79,20 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
             .timeout(std::time::Duration::from_secs(120))
             .build()
             .map_err(|e| format!("建立 HTTP 客戶端失敗: {}", e))?;
-        (s.gemini, c)
+        Some((s.gemini, c))
     } else {
-        // Won't be used — guarded by needs_gemini checks below
-        (Default::default(), reqwest::Client::new())
+        None
     };
 
     // Step 3: Gemini correction
     if req.use_gemini {
+        let (ref settings, ref client) = *gemini_ctx.as_ref().unwrap();
         emit_log(&app, "info", "正在使用 Gemini AI 校正字幕...");
         emit_progress(&app, "gemini", 65, "Gemini AI 校正中...");
 
         let fix_prompt = "你是一個專業的字幕校對員。我會給你一段影片和語音辨識軟體自動產生的 SRT 字幕。請你觀看影片，對照字幕，修正錯字、標點、斷句。保持 SRT 格式不變（序號、時間軸完全不動），只修正文字內容，直接輸出修正後的完整 SRT。";
 
-        match call_gemini(&app, &gemini_client, &gemini_settings, fix_prompt, &srt_final).await {
+        match call_gemini(&app, client, settings, fix_prompt, &srt_final).await {
             Ok(corrected) => {
                 srt_final = corrected;
                 emit_log(&app, "success", "Gemini 校正完成");
@@ -108,6 +110,7 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
 
     // Step 4: Translation
     if !req.translate_to.is_empty() {
+        let (ref settings, ref client) = *gemini_ctx.as_ref().unwrap();
         emit_log(
             &app,
             "info",
@@ -127,7 +130,7 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
             target_lang
         );
 
-        match call_gemini(&app, &gemini_client, &gemini_settings, &translate_prompt, &srt_final).await {
+        match call_gemini(&app, client, settings, &translate_prompt, &srt_final).await {
             Ok(translated) => {
                 srt_final = translated;
                 emit_log(&app, "success", "翻譯完成");

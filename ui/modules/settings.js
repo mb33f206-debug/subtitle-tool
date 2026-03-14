@@ -158,7 +158,7 @@ function setModelValue(model) {
 }
 
 // --- Dir picker factory ---
-function bindDirPicker(pickBtn, clearBtn, displayEl, fallbackText, getter, setter) {
+function bindDirPicker(pickBtn, clearBtn, displayEl, fallbackText, setter) {
   pickBtn.addEventListener('click', async () => {
     const dir = await open({ directory: true });
     if (dir) { setter(dir); displayDir(displayEl, dir, fallbackText); }
@@ -170,7 +170,7 @@ function bindDirPicker(pickBtn, clearBtn, displayEl, fallbackText, getter, sette
 
 // --- Output dir picker (settings modal) ---
 bindDirPicker(pickSettingsOutputDir, clearSettingsOutputDir, settingsOutputDir,
-  '未設定（與影片同目錄）', () => currentOutputDir, (v) => { currentOutputDir = v; });
+  '未設定（與影片同目錄）', (v) => { currentOutputDir = v; });
 
 // --- Log settings (settings modal) ---
 logAutoExportCheckbox.addEventListener('change', () => {
@@ -180,7 +180,7 @@ logAutoExportCheckbox.addEventListener('change', () => {
 
 // --- Log dir picker (settings modal) ---
 bindDirPicker(pickSettingsLogDir, clearSettingsLogDir, settingsLogDir,
-  '未設定（與輸出目錄相同）', () => currentLogDir, (v) => { currentLogDir = v; });
+  '未設定（與輸出目錄相同）', (v) => { currentLogDir = v; });
 
 // --- Apply all settings to module state ---
 function applyAllSettings(settings) {

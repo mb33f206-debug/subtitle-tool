@@ -27,6 +27,12 @@ export function addLog(message, level = 'info') {
   const text = '[' + time + '] ' + message;
   line.textContent = text;
   logContent.appendChild(line);
+
+  // Cap DOM nodes to match memory cap — prevent unbounded DOM growth
+  while (logContent.children.length > MAX_LOG_ENTRIES) {
+    logContent.removeChild(logContent.firstChild);
+  }
+
   logContent.scrollTop = logContent.scrollHeight;
 
   logEntries.push({ time, level, message });

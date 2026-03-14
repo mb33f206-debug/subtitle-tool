@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 /// Cached directory containing the current executable.
 static EXE_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
@@ -129,6 +129,21 @@ pub fn safe_temp_dir() -> PathBuf {
         .clone()
 }
 
+/// Tracks temp files created by `ensure_ascii_path` for cleanup.
+static ASCII_TEMPS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+/// Remove all temp files created by `ensure_ascii_path`.
+/// Call this after processing is complete to prevent disk space leaks.
+pub fn cleanup_ascii_temps() {
+    let paths: Vec<PathBuf> = {
+        let mut guard = ASCII_TEMPS.lock().unwrap_or_else(|e| e.into_inner());
+        std::mem::take(&mut *guard)
+    };
+    for p in paths {
+        let _ = std::fs::remove_file(&p);
+    }
+}
+
 /// Ensure a file path is safe for external tools that can't handle Unicode paths (e.g. whisper.cpp on Windows).
 /// If the path contains non-ASCII characters, creates a hard link (or copy) in an ASCII-safe temp directory.
 pub fn ensure_ascii_path(original: &str, prefix: &str) -> Result<String, String> {
@@ -155,10 +170,18 @@ pub fn ensure_ascii_path(original: &str, prefix: &str) -> Result<String, String>
     // Try hard link first (instant, no extra disk space), fall back to copy
     let _ = std::fs::remove_file(&safe_path);
     if std::fs::hard_link(src, &safe_path).is_ok() {
+        ASCII_TEMPS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(safe_path);
         return Ok(safe_str);
     }
 
     std::fs::copy(src, &safe_path).map_err(|e| format!("無法複製檔案到暫存路徑: {}", e))?;
+    ASCII_TEMPS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(safe_path);
 
     Ok(safe_str)
 }
