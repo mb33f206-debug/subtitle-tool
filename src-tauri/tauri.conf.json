@@ -27,7 +27,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "resources": {
+      "bin/ffmpeg.exe": "bin/ffmpeg.exe",
+      "bin/whisper-cpp.exe": "bin/whisper-cpp.exe",
+      "models/ggml-small.bin": "models/ggml-small.bin"
+    }
   },
   "plugins": {}
 }
