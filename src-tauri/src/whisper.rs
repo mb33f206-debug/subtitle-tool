@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::bin_path::{ensure_ascii_path, find_binary, find_model, run_command};
+use crate::bin_path::{ensure_ascii_path, find_binary, find_model, run_command, safe_temp_dir};
 use crate::progress::{emit_log, emit_progress};
 
 /// Run whisper.cpp speech recognition
@@ -26,9 +26,9 @@ pub fn run_whisper(
     emit_log(app, "info", &format!("使用 whisper: {}", whisper));
     emit_log(app, "info", &format!("使用模型: {}", model));
 
-    // whisper.cpp outputs SRT to {output_base}.srt
+    // whisper.cpp outputs SRT to {output_base}.srt — must be ASCII-safe path
     let audio_p = PathBuf::from(&audio);
-    let output_base = std::env::temp_dir().join(
+    let output_base = safe_temp_dir().join(
         audio_p
             .file_stem()
             .unwrap_or_default()
