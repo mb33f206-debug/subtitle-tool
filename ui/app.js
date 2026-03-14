@@ -26,6 +26,7 @@ let isProcessing = false;
 // --- Init settings & output dir ---
 await initSettings();
 updateOutputDirDisplay();
+document.dispatchEvent(new Event('app-ready'));
 
 function updateOutputDirDisplay() {
   displayDir(outputDirDisplay, getOutputDir(), '與影片同目錄');

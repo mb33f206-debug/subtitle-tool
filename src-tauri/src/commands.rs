@@ -67,7 +67,7 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
     let mut srt_final = srt_raw;
 
     // Load settings and create HTTP client once for Gemini steps
-    let (settings, client) = if needs_gemini {
+    let (gemini_settings, gemini_client) = if needs_gemini {
         let path = settings_path(&app)?;
         let s = load_settings(&path)?;
         if s.gemini.api_key.is_empty() || s.gemini.base_url.is_empty() {
@@ -77,9 +77,10 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
             .timeout(std::time::Duration::from_secs(120))
             .build()
             .map_err(|e| format!("建立 HTTP 客戶端失敗: {}", e))?;
-        (Some(s), Some(c))
+        (s.gemini, c)
     } else {
-        (None, None)
+        // Won't be used — guarded by needs_gemini checks below
+        (Default::default(), reqwest::Client::new())
     };
 
     // Step 3: Gemini correction
@@ -87,13 +88,9 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
         emit_log(&app, "info", "正在使用 Gemini AI 校正字幕...");
         emit_progress(&app, "gemini", 65, "Gemini AI 校正中...");
 
-        let (gemini, c) = match (settings.as_ref(), client.as_ref()) {
-            (Some(s), Some(c)) => (&s.gemini, c),
-            _ => return Err("Gemini 設定未載入".to_string()),
-        };
         let fix_prompt = "你是一個專業的字幕校對員。我會給你一段影片和語音辨識軟體自動產生的 SRT 字幕。請你觀看影片，對照字幕，修正錯字、標點、斷句。保持 SRT 格式不變（序號、時間軸完全不動），只修正文字內容，直接輸出修正後的完整 SRT。";
 
-        match call_gemini(c, gemini, fix_prompt, &srt_final).await {
+        match call_gemini(&app, &gemini_client, &gemini_settings, fix_prompt, &srt_final).await {
             Ok(corrected) => {
                 srt_final = corrected;
                 emit_log(&app, "success", "Gemini 校正完成");
@@ -118,10 +115,6 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
         );
         emit_progress(&app, "translate", 82, "翻譯中...");
 
-        let (gemini, c) = match (settings.as_ref(), client.as_ref()) {
-            (Some(s), Some(c)) => (&s.gemini, c),
-            _ => return Err("Gemini 設定未載入".to_string()),
-        };
         let target_lang = match req.translate_to.as_str() {
             "en" => "英文",
             "ja" => "日文",
@@ -134,7 +127,7 @@ pub async fn process_video(app: tauri::AppHandle, req: ProcessRequest) -> Result
             target_lang
         );
 
-        match call_gemini(c, gemini, &translate_prompt, &srt_final).await {
+        match call_gemini(&app, &gemini_client, &gemini_settings, &translate_prompt, &srt_final).await {
             Ok(translated) => {
                 srt_final = translated;
                 emit_log(&app, "success", "翻譯完成");

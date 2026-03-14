@@ -106,24 +106,24 @@ pub fn settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .path()
         .app_config_dir()
         .map_err(|e| format!("無法取得設定目錄: {}", e))?;
-    fs::create_dir_all(&config_dir)
-        .map_err(|e| format!("無法建立設定目錄: {}", e))?;
     Ok(config_dir.join("settings.json"))
 }
 
 // --- Load / Save ---
 
 pub fn load_settings(path: &Path) -> Result<Settings, String> {
-    if !path.exists() {
-        return Ok(Settings::default());
+    match fs::read_to_string(path) {
+        Ok(content) => serde_json::from_str(&content).map_err(|e| format!("設定檔格式錯誤: {}", e)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Settings::default()),
+        Err(e) => Err(format!("無法讀取設定檔: {}", e)),
     }
-    let content =
-        fs::read_to_string(path).map_err(|e| format!("無法讀取設定檔: {}", e))?;
-    serde_json::from_str(&content).map_err(|e| format!("設定檔格式錯誤: {}", e))
 }
 
 pub fn save_settings_to_file(path: &Path, settings: &serde_json::Value) -> Result<(), String> {
-    let content = serde_json::to_string_pretty(settings)
-        .map_err(|e| format!("序列化設定失敗: {}", e))?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("無法建立設定目錄: {}", e))?;
+    }
+    let content =
+        serde_json::to_string_pretty(settings).map_err(|e| format!("序列化設定失敗: {}", e))?;
     fs::write(path, content).map_err(|e| format!("寫入設定檔失敗: {}", e))
 }

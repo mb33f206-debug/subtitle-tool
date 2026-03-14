@@ -4,6 +4,16 @@ use std::path::PathBuf;
 use crate::bin_path::{ensure_ascii_path, find_binary, find_model, run_command, safe_temp_dir};
 use crate::progress::{emit_log, emit_progress};
 
+/// Detect available CPU threads, capped for whisper performance.
+/// Uses all physical cores (up to 16) to maximize throughput.
+fn detect_threads() -> String {
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    // Use all available cores, cap at 16 to avoid diminishing returns
+    cores.min(16).to_string()
+}
+
 /// Run whisper.cpp speech recognition
 pub fn run_whisper(
     app: &tauri::AppHandle,
@@ -23,8 +33,10 @@ pub fn run_whisper(
     let model = ensure_ascii_path(&model_raw, "whisper_model")?;
     let audio = ensure_ascii_path(audio_path, "whisper_audio")?;
 
+    let threads = detect_threads();
     emit_log(app, "info", &format!("使用 whisper: {}", whisper));
     emit_log(app, "info", &format!("使用模型: {}", model));
+    emit_log(app, "info", &format!("使用執行緒數: {}", threads));
 
     // whisper.cpp outputs SRT to {output_base}.srt — must be ASCII-safe path
     let audio_p = PathBuf::from(&audio);
@@ -38,7 +50,13 @@ pub fn run_whisper(
     );
     let output_base_str = output_base.to_string_lossy().to_string();
 
-    let mut args = vec!["-m", &model, "-f", &audio, "-osrt", "-of", &output_base_str];
+    let mut args = vec![
+        "-m", &model,
+        "-f", &audio,
+        "-t", &threads,
+        "-osrt",
+        "-of", &output_base_str,
+    ];
     if language != "auto" {
         args.extend_from_slice(&["-l", language]);
     }

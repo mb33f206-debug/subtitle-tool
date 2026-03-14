@@ -115,7 +115,7 @@ document.getElementById('fontIncrease').addEventListener('click', () => {
 });
 
 // --- API mode ---
-apiMode.addEventListener('change', () => {
+function updateApiModeUI() {
   if (apiMode.value === 'official') {
     apiBaseUrl.value = 'https://generativelanguage.googleapis.com/v1beta/openai/';
     apiBaseUrl.disabled = true;
@@ -124,7 +124,8 @@ apiMode.addEventListener('change', () => {
     apiBaseUrl.disabled = false;
     apiHint.textContent = 'Proxy 模式：使用 OpenAI 相容的代理伺服器。需要填入 Base URL、API Key 和模型名稱。';
   }
-});
+}
+apiMode.addEventListener('change', updateApiModeUI);
 
 // --- Detect models ---
 detectModelsBtn.addEventListener('click', async () => {
@@ -156,18 +157,20 @@ function setModelValue(model) {
   apiModel.value = model;
 }
 
-// --- Output dir pickers (settings modal) ---
-pickSettingsOutputDir.addEventListener('click', async () => {
-  const dir = await open({ directory: true });
-  if (dir) {
-    currentOutputDir = dir;
-    displayDir(settingsOutputDir, dir, '未設定（與影片同目錄）');
-  }
-});
-clearSettingsOutputDir.addEventListener('click', () => {
-  currentOutputDir = '';
-  displayDir(settingsOutputDir, '', '未設定（與影片同目錄）');
-});
+// --- Dir picker factory ---
+function bindDirPicker(pickBtn, clearBtn, displayEl, fallbackText, getter, setter) {
+  pickBtn.addEventListener('click', async () => {
+    const dir = await open({ directory: true });
+    if (dir) { setter(dir); displayDir(displayEl, dir, fallbackText); }
+  });
+  clearBtn.addEventListener('click', () => {
+    setter(''); displayDir(displayEl, '', fallbackText);
+  });
+}
+
+// --- Output dir picker (settings modal) ---
+bindDirPicker(pickSettingsOutputDir, clearSettingsOutputDir, settingsOutputDir,
+  '未設定（與影片同目錄）', () => currentOutputDir, (v) => { currentOutputDir = v; });
 
 // --- Log settings (settings modal) ---
 logAutoExportCheckbox.addEventListener('change', () => {
@@ -175,17 +178,9 @@ logAutoExportCheckbox.addEventListener('change', () => {
   logAutoExportLabel.textContent = currentLogAutoExport ? '已啟用' : '已停用';
 });
 
-pickSettingsLogDir.addEventListener('click', async () => {
-  const dir = await open({ directory: true });
-  if (dir) {
-    currentLogDir = dir;
-    displayDir(settingsLogDir, dir, '未設定（與輸出目錄相同）');
-  }
-});
-clearSettingsLogDir.addEventListener('click', () => {
-  currentLogDir = '';
-  displayDir(settingsLogDir, '', '未設定（與輸出目錄相同）');
-});
+// --- Log dir picker (settings modal) ---
+bindDirPicker(pickSettingsLogDir, clearSettingsLogDir, settingsLogDir,
+  '未設定（與輸出目錄相同）', () => currentLogDir, (v) => { currentLogDir = v; });
 
 // --- Apply all settings to module state ---
 function applyAllSettings(settings) {
@@ -217,8 +212,7 @@ btnSettings.addEventListener('click', async () => {
     logExportFormat.value = currentLogFormat;
     displayDir(settingsLogDir, currentLogDir, '未設定（與輸出目錄相同）');
 
-    apiBaseUrl.disabled = (apiMode.value === 'official');
-    apiMode.dispatchEvent(new Event('change'));
+    updateApiModeUI();
   } catch (e) { console.error('Load settings error:', e); }
   settingsModal.classList.add('active');
 });

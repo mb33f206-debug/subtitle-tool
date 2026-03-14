@@ -1,9 +1,18 @@
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-/// Get the directory containing the current executable.
+/// Cached directory containing the current executable.
+static EXE_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+
 fn exe_dir() -> Option<PathBuf> {
-    std::env::current_exe().ok()?.parent().map(|p| p.to_path_buf())
+    EXE_DIR
+        .get_or_init(|| {
+            std::env::current_exe()
+                .ok()?
+                .parent()
+                .map(|p| p.to_path_buf())
+        })
+        .clone()
 }
 
 /// Append .exe on Windows
@@ -39,19 +48,32 @@ pub fn find_binary(name: &str) -> String {
 /// Search order: 1. models/ next to exe  2. next to exe  3. home cache  4. cwd
 pub fn find_model() -> Option<String> {
     let check = |p: PathBuf| -> Option<String> {
-        if p.exists() { Some(p.to_string_lossy().to_string()) } else { None }
+        if p.exists() {
+            Some(p.to_string_lossy().to_string())
+        } else {
+            None
+        }
     };
 
     if let Some(dir) = exe_dir() {
-        if let Some(s) = check(dir.join("models").join("ggml-small.bin")) { return Some(s); }
-        if let Some(s) = check(dir.join("ggml-small.bin")) { return Some(s); }
+        if let Some(s) = check(dir.join("models").join("ggml-small.bin")) {
+            return Some(s);
+        }
+        if let Some(s) = check(dir.join("ggml-small.bin")) {
+            return Some(s);
+        }
     }
 
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_default();
     if !home.is_empty() {
-        if let Some(s) = check(PathBuf::from(&home).join(".cache").join("whisper").join("ggml-small.bin")) {
+        if let Some(s) = check(
+            PathBuf::from(&home)
+                .join(".cache")
+                .join("whisper")
+                .join("ggml-small.bin"),
+        ) {
             return Some(s);
         }
     }
@@ -80,29 +102,31 @@ static SAFE_TEMP: OnceLock<PathBuf> = OnceLock::new();
 /// On Windows, if %TEMP% contains non-ASCII (e.g. Chinese username),
 /// falls back to %LOCALAPPDATA%\Temp, then C:\Temp.
 pub fn safe_temp_dir() -> PathBuf {
-    SAFE_TEMP.get_or_init(|| {
-        let tmp = std::env::temp_dir();
-        if tmp.to_string_lossy().is_ascii() {
-            return tmp;
-        }
-        // Try %LOCALAPPDATA%\Temp first (always exists, user-writable)
-        if cfg!(target_os = "windows") {
-            if let Ok(local) = std::env::var("LOCALAPPDATA") {
-                let p = PathBuf::from(&local).join("Temp");
-                if p.to_string_lossy().is_ascii() {
-                    let _ = std::fs::create_dir_all(&p);
-                    return p;
+    SAFE_TEMP
+        .get_or_init(|| {
+            let tmp = std::env::temp_dir();
+            if tmp.to_string_lossy().is_ascii() {
+                return tmp;
+            }
+            // Try %LOCALAPPDATA%\Temp first (always exists, user-writable)
+            if cfg!(target_os = "windows") {
+                if let Ok(local) = std::env::var("LOCALAPPDATA") {
+                    let p = PathBuf::from(&local).join("Temp");
+                    if p.to_string_lossy().is_ascii() {
+                        let _ = std::fs::create_dir_all(&p);
+                        return p;
+                    }
                 }
             }
-        }
-        let fallback = if cfg!(target_os = "windows") {
-            PathBuf::from("C:\\Temp")
-        } else {
-            PathBuf::from("/tmp")
-        };
-        let _ = std::fs::create_dir_all(&fallback);
-        fallback
-    }).clone()
+            let fallback = if cfg!(target_os = "windows") {
+                PathBuf::from("C:\\Temp")
+            } else {
+                PathBuf::from("/tmp")
+            };
+            let _ = std::fs::create_dir_all(&fallback);
+            fallback
+        })
+        .clone()
 }
 
 /// Ensure a file path is safe for external tools that can't handle Unicode paths (e.g. whisper.cpp on Windows).
@@ -134,8 +158,7 @@ pub fn ensure_ascii_path(original: &str, prefix: &str) -> Result<String, String>
         return Ok(safe_str);
     }
 
-    std::fs::copy(src, &safe_path)
-        .map_err(|e| format!("無法複製檔案到暫存路徑: {}", e))?;
+    std::fs::copy(src, &safe_path).map_err(|e| format!("無法複製檔案到暫存路徑: {}", e))?;
 
     Ok(safe_str)
 }
@@ -143,7 +166,11 @@ pub fn ensure_ascii_path(original: &str, prefix: &str) -> Result<String, String>
 /// Run an external command and return its output.
 /// If the command path contains non-ASCII, copies it to an ASCII-safe location first.
 /// Sets working directory to the binary's parent so Windows can find sibling DLLs.
-pub fn run_command(cmd: &str, args: &[&str], error_hint: &str) -> Result<std::process::Output, String> {
+pub fn run_command(
+    cmd: &str,
+    args: &[&str],
+    error_hint: &str,
+) -> Result<std::process::Output, String> {
     let safe_cmd = if !cmd.is_ascii() {
         ensure_ascii_path(cmd, "cmd")?
     } else {
@@ -155,7 +182,7 @@ pub fn run_command(cmd: &str, args: &[&str], error_hint: &str) -> Result<std::pr
 
     // Set working directory to binary's parent for DLL discovery on Windows
     if let Some(parent) = std::path::Path::new(&safe_cmd).parent() {
-        if parent.exists() && parent.to_string_lossy().len() > 0 {
+        if !parent.as_os_str().is_empty() && parent.exists() {
             command.current_dir(parent);
         }
     }
