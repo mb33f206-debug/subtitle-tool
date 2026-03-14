@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::bin_path::{find_binary, run_command, safe_temp_dir};
+use crate::bin_path::{find_binary, run_command, safe_temp_dir, sanitize_filename};
 use crate::progress::{emit_log, emit_progress};
 
 /// Extract audio from video using bundled or system ffmpeg
@@ -16,9 +16,7 @@ pub fn extract_audio(app: &tauri::AppHandle, video_path: &str) -> Result<String,
         .file_stem()
         .unwrap_or_default()
         .to_string_lossy();
-    // Sanitize filename to ASCII for whisper-cpp compatibility downstream
-    let safe_stem: String = file_stem.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
-    let audio_path = safe_temp_dir().join(format!("{}_subtitle_temp.wav", safe_stem));
+    let audio_path = safe_temp_dir().join(format!("{}_subtitle_temp.wav", sanitize_filename(&file_stem)));
     let audio_str = audio_path.to_string_lossy().to_string();
 
     run_command(

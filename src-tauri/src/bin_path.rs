@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 /// Get the directory containing the current executable.
 fn exe_dir() -> Option<PathBuf> {
@@ -20,20 +21,17 @@ pub fn find_binary(name: &str) -> String {
     let bin_name = binary_name(name);
 
     if let Some(dir) = exe_dir() {
-        // 1. bin/ subdirectory next to executable
         let in_bin = dir.join("bin").join(&bin_name);
         if in_bin.exists() {
             return in_bin.to_string_lossy().to_string();
         }
 
-        // 2. Directly next to executable
         let beside = dir.join(&bin_name);
         if beside.exists() {
             return beside.to_string_lossy().to_string();
         }
     }
 
-    // 3. Fallback: rely on system PATH
     name.to_string()
 }
 
@@ -61,21 +59,50 @@ pub fn find_model() -> Option<String> {
     check(PathBuf::from("models").join("ggml-small.bin"))
 }
 
+/// Sanitize a string to contain only safe ASCII filename characters.
+/// Replaces non-ASCII and filesystem-unsafe chars with underscore.
+pub fn sanitize_filename(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Cached ASCII-safe temp directory. Computed once per process.
+static SAFE_TEMP: OnceLock<PathBuf> = OnceLock::new();
+
 /// Get a guaranteed ASCII-safe temp directory.
-/// On Windows, if %TEMP% contains non-ASCII (e.g. Chinese username), falls back to C:\Temp.
+/// On Windows, if %TEMP% contains non-ASCII (e.g. Chinese username),
+/// falls back to %LOCALAPPDATA%\Temp, then C:\Temp.
 pub fn safe_temp_dir() -> PathBuf {
-    let tmp = std::env::temp_dir();
-    if tmp.to_string_lossy().is_ascii() {
-        return tmp;
-    }
-    // Fallback: use C:\Temp on Windows, /tmp on Unix
-    let fallback = if cfg!(target_os = "windows") {
-        PathBuf::from("C:\\Temp")
-    } else {
-        PathBuf::from("/tmp")
-    };
-    let _ = std::fs::create_dir_all(&fallback);
-    fallback
+    SAFE_TEMP.get_or_init(|| {
+        let tmp = std::env::temp_dir();
+        if tmp.to_string_lossy().is_ascii() {
+            return tmp;
+        }
+        // Try %LOCALAPPDATA%\Temp first (always exists, user-writable)
+        if cfg!(target_os = "windows") {
+            if let Ok(local) = std::env::var("LOCALAPPDATA") {
+                let p = PathBuf::from(&local).join("Temp");
+                if p.to_string_lossy().is_ascii() {
+                    let _ = std::fs::create_dir_all(&p);
+                    return p;
+                }
+            }
+        }
+        let fallback = if cfg!(target_os = "windows") {
+            PathBuf::from("C:\\Temp")
+        } else {
+            PathBuf::from("/tmp")
+        };
+        let _ = std::fs::create_dir_all(&fallback);
+        fallback
+    }).clone()
 }
 
 /// Ensure a file path is safe for external tools that can't handle Unicode paths (e.g. whisper.cpp on Windows).
@@ -87,15 +114,15 @@ pub fn ensure_ascii_path(original: &str, prefix: &str) -> Result<String, String>
 
     let src = std::path::Path::new(original);
     let filename = src.file_name().unwrap_or_default().to_string_lossy();
-    // Use ASCII-safe filename: replace non-ASCII chars in filename too
-    let safe_filename: String = filename.chars().map(|c| if c.is_ascii() { c } else { '_' }).collect();
-    let safe_path = safe_temp_dir().join(format!("{}_{}", prefix, safe_filename));
+    let safe_path = safe_temp_dir().join(format!("{}_{}", prefix, sanitize_filename(&filename)));
     let safe_str = safe_path.to_string_lossy().to_string();
 
-    // If the safe copy already exists with same size, reuse it
+    // Reuse existing copy if same size AND same modification time
     if safe_path.exists() {
         if let (Ok(src_meta), Ok(dst_meta)) = (src.metadata(), safe_path.metadata()) {
-            if src_meta.len() == dst_meta.len() {
+            let same_size = src_meta.len() == dst_meta.len();
+            let same_mtime = src_meta.modified().ok() == dst_meta.modified().ok();
+            if same_size && same_mtime {
                 return Ok(safe_str);
             }
         }
@@ -115,16 +142,25 @@ pub fn ensure_ascii_path(original: &str, prefix: &str) -> Result<String, String>
 
 /// Run an external command and return its output.
 /// If the command path contains non-ASCII, copies it to an ASCII-safe location first.
+/// Sets working directory to the binary's parent so Windows can find sibling DLLs.
 pub fn run_command(cmd: &str, args: &[&str], error_hint: &str) -> Result<std::process::Output, String> {
-    // Ensure the command itself is at an ASCII-safe path
     let safe_cmd = if !cmd.is_ascii() {
         ensure_ascii_path(cmd, "cmd")?
     } else {
         cmd.to_string()
     };
 
-    let output = std::process::Command::new(&safe_cmd)
-        .args(args)
+    let mut command = std::process::Command::new(&safe_cmd);
+    command.args(args);
+
+    // Set working directory to binary's parent for DLL discovery on Windows
+    if let Some(parent) = std::path::Path::new(&safe_cmd).parent() {
+        if parent.exists() && parent.to_string_lossy().len() > 0 {
+            command.current_dir(parent);
+        }
+    }
+
+    let output = command
         .output()
         .map_err(|e| format!("{} 執行失敗: {}。{}", cmd, e, error_hint))?;
 
