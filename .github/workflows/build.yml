@@ -73,11 +73,21 @@ jobs:
           path: subtitle-tool-windows.zip
           retention-days: 30
 
-      - name: Create or update Release
+      - name: Get version from tauri.conf.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          TAG="v${VERSION}-build.${{ github.run_number }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
         uses: softprops/action-gh-release@v2
+        env:
+          COMMIT_SHA: ${{ github.sha }}
         with:
-          tag_name: latest
-          name: "字幕提取工具 - 最新版"
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "字幕提取工具 ${{ steps.version.outputs.tag }}"
           body: |
             ## 使用方式
             1. 下載 `subtitle-tool-windows.zip`
