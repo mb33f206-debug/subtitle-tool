@@ -203,6 +203,14 @@ pub fn run_command(
     let mut command = std::process::Command::new(&safe_cmd);
     command.args(args);
 
+    // Hide console window on Windows (no CMD flash)
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
     // Set working directory to binary's parent for DLL discovery on Windows
     if let Some(parent) = std::path::Path::new(&safe_cmd).parent() {
         if !parent.as_os_str().is_empty() && parent.exists() {
